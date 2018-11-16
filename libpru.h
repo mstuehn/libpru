@@ -31,7 +31,8 @@ extern "C"
 {
 #endif
 
-#ifdef __BLOCKS__
+//#ifdef __BLOCKS__
+#if 0
     #include <Block.h>
     #define ASSIGN_FUNC(to, func) (to) = Block_copy(func)
     #define RELASE_FUNC(func) do{ if( func ) Block_release(func); }while(0)
