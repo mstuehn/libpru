@@ -177,7 +177,7 @@ am335x_irq_ctrl( uint8_t irq, int8_t channel, int8_t sysevent, bool enable)
     else
         snprintf(sysctl_value, sizeof(sysctl_value), "%s", "NONE");
 
-    printf("sysctl: %s %s\n", sysctlname, sysctl_value);
+    DPRINTF("sysctl: %s %s\n", sysctlname, sysctl_value);
     result = sysctlbyname(sysctlname, NULL, 0, &sysctl_value, strlen(sysctl_value));
     if( result ){
         fprintf(stderr, "Failed to sysctl: %s %s -> %i\n", sysctlname, sysctl_value, result);
@@ -190,7 +190,7 @@ am335x_irq_ctrl( uint8_t irq, int8_t channel, int8_t sysevent, bool enable)
     else
         snprintf(sysctl_value, sizeof(sysctl_value), "%s", "NONE");
 
-    printf("sysctl: %s %s\n", sysctlname, sysctl_value);
+    DPRINTF("sysctl: %s %s\n", sysctlname, sysctl_value);
     result = sysctlbyname(sysctlname, NULL, 0, &sysctl_value, strlen(sysctl_value));
     if( result ){
         fprintf(stderr, "Failed to sysctl: %s %s -> %i\n", sysctlname, sysctl_value, result);
@@ -198,14 +198,14 @@ am335x_irq_ctrl( uint8_t irq, int8_t channel, int8_t sysevent, bool enable)
     }
 
     snprintf(sysctlname, sizeof(sysctlname), sysctlenable, irq);
-    printf("sysctl: %s %s\n", sysctlname, sysctl_value);
+    DPRINTF("sysctl: %s %s\n", sysctlname, sysctl_value);
     result = sysctlbyname(sysctlname, NULL, 0, &enable, sizeof(enable));
     if( result ){
         fprintf(stderr, "Failed to sysctl: %s %s -> %i\n", sysctlname, sysctl_value, result);
         return result;
     }
 
-    printf("sysctl: %s %i\n", sysctlname, enable);
+    DPRINTF("sysctl: %s %i\n", sysctlname, enable);
     if( enable ) return sysctlbyname(glob_irq_enable, NULL, 0, &enable, sizeof(enable));
     else return result;
 }
@@ -217,7 +217,7 @@ am335x_handle_intr( void* irq )
 
     struct rtprio rtp = { .type = RTP_PRIO_REALTIME, .prio = 20 } ;
     int ret = rtprio_thread(RTP_SET, 0, &rtp );
-    printf("setting rtprio %i\n", ret );
+    DPRINTF("setting rtprio %i\n", ret );
 
     struct kevent change;
     struct kevent event;
@@ -265,7 +265,7 @@ am335x_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t sysevent, han
     snprintf(path, sizeof(path), path_format , irq);
     priv->irqs[irq].fd = open( path, O_RDONLY | O_NONBLOCK );
 
-    printf("Opening device %s returned %i\n", path, priv->irqs[irq].fd);
+    DPRINTF("Opening device %s returned %i\n", path, priv->irqs[irq].fd);
 
     if (pthread_create(&priv->irqs[irq].thread, NULL, am335x_handle_intr, &priv->irqs[irq]) != 0) {
         pru_free(pru);
