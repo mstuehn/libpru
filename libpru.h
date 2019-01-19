@@ -31,18 +31,6 @@ extern "C"
 {
 #endif
 
-//#ifdef __BLOCKS__
-#if 0
-    #include <Block.h>
-    #define ASSIGN_FUNC(to, func) (to) = Block_copy(func)
-    #define RELASE_FUNC(func) do{ if( func ) Block_release(func); }while(0)
-    typedef void (^handler_t)(uint64_t);
-#else
-    #define ASSIGN_FUNC(to, func) (to) = (func)
-    #define RELASE_FUNC(func) (func) = NULL
-    typedef void (*handler_t)(uint64_t);
-#endif
-
 struct pru;
 typedef struct pru * pru_t;
 
@@ -66,7 +54,7 @@ pru_type_t pru_name_to_type(const char *);
  * Registers to host interrupt.
  *
  */
-int pru_register_irq(pru_t, uint8_t, int8_t, int8_t, handler_t );
+int pru_register_irq(pru_t, uint8_t, int8_t, int8_t );
 
 /*
  * Deregisters to host interrupt.

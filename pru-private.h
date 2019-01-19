@@ -54,7 +54,7 @@ struct pru {
     int (*set_pc)(pru_t, unsigned int, uint16_t);
     int (*disassemble)(pru_t, uint32_t, char *, size_t);
     int (*insert_breakpoint)(pru_t, unsigned int, uint32_t, uint32_t *);
-    int (*register_irq)(pru_t, uint8_t, int8_t, int8_t, handler_t);
+    int (*register_irq)(pru_t, uint8_t, int8_t, int8_t );
     int (*deregister_irq)(pru_t, uint8_t );
 };
 

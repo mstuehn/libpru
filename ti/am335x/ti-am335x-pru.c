@@ -63,8 +63,7 @@ struct irq_data
 {
     int fd;
     int kq;
-    pthread_t thread;
-    handler_t intr_handler;
+    char* irq_device;
 };
 
 struct am335x_pru_priv
@@ -210,91 +209,39 @@ am335x_irq_ctrl( uint8_t irq, int8_t channel, int8_t sysevent, bool enable)
     else return result;
 }
 
-static void*
-am335x_handle_intr( void* irq )
-{
-    struct irq_data* priv = irq;
-
-    struct rtprio rtp = { .type = RTP_PRIO_REALTIME, .prio = 20 } ;
-    int ret = rtprio_thread(RTP_SET, 0, &rtp );
-    DPRINTF("setting rtprio %i\n", ret );
-
-    struct kevent change;
-    struct kevent event;
-
-    struct timespec timeout;
-    timeout.tv_sec = 1;
-    timeout.tv_nsec = 0;
-
-    for(;;)
-    {
-        if(priv->fd == -1 ) return NULL;
-
-        EV_SET(&change, priv->fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
-
-        int num_events = kevent(priv->kq, &change, 1, &event, 1, &timeout);
-
-        if( num_events == 0 ) continue; // timeout
-        if( num_events < 0 ) return NULL;
-
-        if( event.flags & EVFILT_READ )
-        {
-            uint64_t timestamp;
-            while( read( priv->fd, &timestamp, sizeof(timestamp) ) > 0 )
-            {
-                priv->intr_handler(timestamp);
-            }
-        }
-    }
-
-    return NULL;
-}
-
 static int
-am335x_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t sysevent, handler_t handler)
+am335x_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t sysevent )
 {
     struct am335x_pru_priv* priv = pru->priv;
     if( irq > 9 || channel > 9 || sysevent > 63 )
         return -1;
-    ASSIGN_FUNC(priv->irqs[irq].intr_handler, handler);
 
     int result = am335x_irq_ctrl( irq, channel, sysevent, true);
     if( result < 0 ) return result;
 
     char path[32];
     snprintf(path, sizeof(path), path_format , irq);
-    priv->irqs[irq].fd = open( path, O_RDONLY | O_NONBLOCK );
+    priv->irqs[irq].irq_device = strndup( path, sizeof(path) );
 
-    DPRINTF("Opening device %s returned %i\n", path, priv->irqs[irq].fd);
+    return (priv->irqs[irq].irq_device == NULL) ? -1 : 0;
+}
 
-    if (pthread_create(&priv->irqs[irq].thread, NULL, am335x_handle_intr, &priv->irqs[irq]) != 0) {
-        pru_free(pru);
-        errno = EINVAL; /* XXX */
-        return -1;
-    }
-    pthread_set_name_np( priv->irqs[irq].thread, "pru_isr" );
-
-    priv->irqs[irq].kq = kqueue();
-    if( priv->irqs[irq].kq < 0 )
-    {
-        errno = ENXIO;
-        return -1;
-    }
-
-    return priv->irqs[irq].fd;
+static const char* const
+am335x_get_irq_devicename( pru_t pru, uint8_t irq )
+{
+    struct am335x_pru_priv* priv = pru->priv;
+    return priv->irqs[irq].irq_device;
 }
 
 static int
 am335x_deregister_irq(pru_t pru, uint8_t irq)
 {
     struct am335x_pru_priv* priv = pru->priv;
-    RELASE_FUNC(priv->irqs[irq].intr_handler);
-    priv->irqs[irq].fd = -1;
 
-    pthread_cancel( priv->irqs[irq].thread );
-    pthread_join( priv->irqs[irq].thread, NULL );
-
-    close( priv->irqs[irq].kq );
+    if( priv->irqs[irq].irq_device ) {
+        free( priv->irqs[irq].irq_device );
+        priv->irqs[irq].irq_device = NULL;
+    }
 
     return am335x_irq_ctrl( irq, 0, 0, false);
 }
@@ -317,8 +264,7 @@ am335x_deinit(pru_t pru)
         struct am335x_pru_priv* priv = pru->priv;
         for( int i = 0; i < AM33XX_NUM_HOST_INTS; i++)
         {
-            if( priv->irqs[i].fd != -1 )
-                close(priv->irqs[i].fd);
+            am335x_deregister_irq( pru, i );
         }
 
         free(priv);
