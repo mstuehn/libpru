@@ -46,6 +46,8 @@
 #include <sched.h>
 #include <assert.h>
 
+#include <sys/select.h>
+
 #include "libpru.h"
 #include "pru-private.h"
 #include "ti-pru.h"
@@ -69,7 +71,7 @@ struct am335x_pru_priv
     struct irq_data irqs[AM33XX_NUM_HOST_INTS];
 };
 
-static uint8_t irq_active;
+static uint8_t irq_active = 1;
 
 static int
 am335x_disable(pru_t pru, unsigned int pru_number)
@@ -216,69 +218,50 @@ am335x_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t sysevent )
     if( irq > 9 || channel > 9 || sysevent > 63 )
         return -1;
 
-    int result = am335x_irq_ctrl( irq, channel, sysevent, true);
-    if( result < 0 ) return result;
-
-    char path[32];
-    snprintf(path, sizeof(path), path_format , irq);
-    priv->irqs[irq].irq_device = strndup( path, sizeof(path) );
-
-    irq_active = 1;
-
-    return (priv->irqs[irq].irq_device == NULL) ? -1 : 0;
+    return am335x_irq_ctrl( irq, channel, sysevent, true);
 }
 
 static int
 am335x_wait_irq(pru_t pru, uint8_t irqnum, uint8_t* keepRunning, handler_t callback)
 {
+    char path[32];
     struct kevent change, event;
-    struct timespec timeout = { .tv_sec = 0, .tv_nsec = 10000000 }; // 10ms
+    struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
     struct am335x_pru_priv* am33 = pru->priv;
     struct irq_data* priv = &am33->irqs[irqnum];
 
-    if( priv->irq_device == NULL ) return -1;
+    snprintf(path, sizeof(path), path_format , irqnum);
 
-    int fd = open( priv->irq_device, O_RDONLY|O_NONBLOCK );
+    int fd = open( path, O_RDONLY | O_NONBLOCK );
     if( fd == -1 ) return -1;
 
-    int kq = kqueue();
-    if( kq == -1 ) return -1;
-
+    printf("Start listening on %s (%d/%d) fd%d\n", path,
+		    *keepRunning, irq_active, fd ); 
     while( *keepRunning && irq_active )
     {
-        EV_SET(&change, fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+	fd_set rfds;
+	FD_ZERO(&rfds);
+	FD_SET(fd,&rfds);
 
-        int num_events = kevent(kq, &change, 1, &event, 1, &timeout);
+	int num_events = select(fd+1, &rfds, NULL, NULL, &timeout);
 
         if( num_events == 0 ) continue; // timeout
         if( num_events < 0 ) return num_events;
 
-        if( event.flags & EVFILT_READ )
-        {
-            uint64_t timestamp;
-            while( read( fd, &timestamp, sizeof(timestamp) ) > 0 )
-            {
-                callback(timestamp);
-            }
-        }
+          uint64_t timestamp;
+          while( read( fd, &timestamp, sizeof(timestamp) ) > 0 )
+          {
+              callback(timestamp);
+          }
     }
 
     close( fd );
-    close( kq );
     return 0;
 }
 
 static int
 am335x_deregister_irq(pru_t pru, uint8_t irq)
 {
-    struct am335x_pru_priv* priv = pru->priv;
-
-    if( priv->irqs[irq].irq_device ) {
-        free( priv->irqs[irq].irq_device );
-        priv->irqs[irq].irq_device = NULL;
-    }
-    irq_active = 0;
-
     return am335x_irq_ctrl( irq, 0, 0, false);
 }
 
@@ -286,28 +269,8 @@ am335x_deregister_irq(pru_t pru, uint8_t irq)
 static int
 am335x_deinit(pru_t pru)
 {
-    for(unsigned int i = 0 ; i < AM33XX_NUM_PRUSS; i++ )
-    {
-        am335x_disable(pru, i);
-        am335x_reset(pru, i);
-    }
-
     if (pru->mem != MAP_FAILED)
         munmap(pru->mem, pru->mem_size);
-
-    if( pru->priv )
-    {
-        struct am335x_pru_priv* priv = pru->priv;
-        for( int i = 0; i < AM33XX_NUM_HOST_INTS; i++)
-        {
-            am335x_deregister_irq( pru, i );
-        }
-
-        free(priv);
-        priv = NULL;
-    }
-
-    close(pru->fd);
 
     return 0;
 }
@@ -410,6 +373,7 @@ am335x_initialize( pru_t pru )
     pru->mem = mmap(0, AM33XX_MMAP_SIZE, PROT_READ|PROT_WRITE,
         MAP_SHARED, pru->fd, 0);
     saved_errno = errno;
+    close( pru->fd );
 
     if (pru->mem == MAP_FAILED)
     {
@@ -454,10 +418,5 @@ am335x_initialize( pru_t pru )
 
     DPRINTF("found AM335x PRU @ %p\n", (void*)pru->mem);
 
-    for(unsigned int i = 0 ; i < AM33XX_NUM_PRUSS; i++ )
-    {
-        am335x_disable(pru, i);
-        am335x_reset(pru, i);
-    }
     return 0;
 }
