@@ -29,13 +29,14 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
+#include <inttypes.h>
 #include <libpru.h>
 
-static uint8_t stop = 0;
+static uint8_t run = 1;
 
 static void sighandler( int signal )
 {
-    if( signal == SIGINT ) stop = 1;
+    if( signal == SIGINT ) run = 0;
 }
 
 static void callback_function( uint64_t ts )
@@ -43,12 +44,12 @@ static void callback_function( uint64_t ts )
     uint64_t last;
     uint64_t last_diff;
     uint64_t diff = ts - last;
-    //printf("TS: %lli.%09lli duration (%llins/%lli.%0lli) \n",
-    //       //diff.tv_sec, diff.tv_nsec);
-    //       ts/1000000000, ts%1000000000,
-    //       diff,
-    //       (int64_t)(diff - last_diff)/1000,
-    //       (diff - last_diff)%1000 );
+    printf("TS: %" PRIu64 ".%09"PRIu64 "duration (%"PRIu64"ns/%"PRIu64".%0"PRIu64") \n",
+           //diff.tv_sec, diff.tv_nsec);
+           ts/1000000000, ts%1000000000,
+           diff,
+           (int64_t)(diff - last_diff)/1000,
+           (diff - last_diff)%1000 );
     last = ts;
     last_diff = diff;
 }
@@ -65,16 +66,18 @@ int
 main(int argc, char **argv)
 {
 	int ch;
-	int reset, enable, disable, wait, callback;
+	int reset, enable, disable, wait, callback, reg_irq, unreg_irq;
 	const char *type = "ti";
-	unsigned int pru_number, irq_number, event_number;
+	unsigned int pru_number;
+	int8_t irq_number, event_number;
 	pru_t pru;
-    int error;
+	int error;
 
-  reset = enable = disable = pru_number = wait = callback = 0;
+	reset = enable = disable = pru_number = wait = callback = reg_irq = unreg_irq = 0;
+	irq_number = event_number = -1;
 	type = NULL;
 	error = 0;
-	while ((ch = getopt(argc, argv, "t:p:edrwci:v:")) != -1) {
+	while ((ch = getopt(argc, argv, "t:p:edrwci:v:u")) != -1) {
 		switch (ch) {
 		case 't':
 			type = optarg;
@@ -102,6 +105,9 @@ main(int argc, char **argv)
 			break;
 		case 'v':
 			event_number = (unsigned int)strtoul(optarg, NULL, 10);
+			break;
+		case 'u':
+			unreg_irq = 1;
 			break;
 		case '?':
 		default:
@@ -166,13 +172,18 @@ main(int argc, char **argv)
 			return 8;
 		}
 	}
-    //Example code for interrupts
-	if( callback ) {
-        signal( SIGINT, sighandler );
-        pru_register_irq( pru, irq_number, irq_number, event_number );
-        pru_wait_irq( pru, irq_number, &stop, callback_function );
-        pru_deregister_irq(pru, irq_number );
-    }
+	if( irq_number > 0 && event_number > 0 )
+	{
+		pru_register_irq( pru, irq_number, irq_number, event_number );
+	}
+	if( callback && irq_number > 0 ) {
+		signal( SIGINT, sighandler );
+		pru_wait_irq( pru, irq_number, &run, callback_function );
+	}
+	if( unreg_irq && irq_number > 0 )
+	{
+		pru_deregister_irq(pru, irq_number );
+	}
 
 	pru_free(pru);
 }
