@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 project(libpru)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-add_library(pru SHARED pru.c ti/ti-pru.c ti/am335x/ti-am335x-pru.c)
+add_library(pru SHARED STATIC pru.c ti/ti-pru.c ti/am335x/ti-am335x-pru.c)
 add_definitions(-I${CMAKE_SOURCE_DIR} -I${CMAKE_SOURCE_DIR}/ti -I${CMAKE_SOURCE_DIR}/ti/am335x)
 set_property(TARGET pru PROPERTY SOVERSION "3")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror -fblocks")
