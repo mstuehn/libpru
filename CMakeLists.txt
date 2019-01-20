@@ -8,3 +8,14 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror -fblocks")
 target_link_libraries(pru pthread BlocksRuntime)
 install(TARGETS pru DESTINATION lib)
 install(FILES libpru.h DESTINATION include)
+
+add_executable(pructl pructl.c)
+target_link_libraries(pructl pru)
+
+add_executable(prudbg prudbg.c)
+find_library(libedit NAMES edit)
+find_library(libutil NAMES util)
+target_link_libraries(prudbg pru ${libedit} ${libutil})
+install(TARGETS pructl prudbg DESTINATION sbin)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
