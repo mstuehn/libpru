@@ -61,8 +61,6 @@ static const char path_format[] = "/dev/pruss0.irq%i";
 
 struct irq_data
 {
-    int fd;
-    int kq;
     char* irq_device;
 };
 
@@ -70,6 +68,8 @@ struct am335x_pru_priv
 {
     struct irq_data irqs[AM33XX_NUM_HOST_INTS];
 };
+
+static uint8_t irq_active;
 
 static int
 am335x_disable(pru_t pru, unsigned int pru_number)
@@ -223,14 +223,49 @@ am335x_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t sysevent )
     snprintf(path, sizeof(path), path_format , irq);
     priv->irqs[irq].irq_device = strndup( path, sizeof(path) );
 
+    irq_active = 1;
+
     return (priv->irqs[irq].irq_device == NULL) ? -1 : 0;
 }
 
-static const char* const
-am335x_get_irq_devicename( pru_t pru, uint8_t irq )
+static int
+am335x_wait_irq(pru_t pru, uint8_t irqnum, uint8_t* keepRunning, handler_t callback)
 {
-    struct am335x_pru_priv* priv = pru->priv;
-    return priv->irqs[irq].irq_device;
+    struct kevent change, event;
+    struct timespec timeout = { .tv_sec = 0, .tv_nsec = 10000000 }; // 10ms
+    struct am335x_pru_priv* am33 = pru->priv;
+    struct irq_data* priv = &am33->irqs[irqnum];
+
+    if( priv->irq_device == NULL ) return -1;
+
+    int fd = open( priv->irq_device, O_RDONLY|O_NONBLOCK );
+    if( fd == -1 ) return -1;
+
+    int kq = kqueue();
+    if( kq == -1 ) return -1;
+
+    while( *keepRunning && irq_active )
+    {
+        EV_SET(&change, fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+
+        int num_events = kevent(kq, &change, 1, &event, 1, &timeout);
+
+        if( num_events == 0 ) continue; // timeout
+        if( num_events < 0 ) return num_events;
+
+        if( event.flags & EVFILT_READ )
+        {
+            uint64_t timestamp;
+            while( read( fd, &timestamp, sizeof(timestamp) ) > 0 )
+            {
+                callback(timestamp);
+            }
+        }
+    }
+
+    close( fd );
+    close( kq );
+    return 0;
 }
 
 static int
@@ -242,6 +277,7 @@ am335x_deregister_irq(pru_t pru, uint8_t irq)
         free( priv->irqs[irq].irq_device );
         priv->irqs[irq].irq_device = NULL;
     }
+    irq_active = 0;
 
     return am335x_irq_ctrl( irq, 0, 0, false);
 }
@@ -270,6 +306,7 @@ am335x_deinit(pru_t pru)
         free(priv);
         priv = NULL;
     }
+
     close(pru->fd);
 
     return 0;
@@ -404,6 +441,7 @@ am335x_initialize( pru_t pru )
     pru->set_pc = am335x_set_pc;
     pru->insert_breakpoint = am335x_insert_breakpoint;
     pru->register_irq = am335x_register_irq;
+    pru->wait_irq = am335x_wait_irq;
     pru->deregister_irq = am335x_deregister_irq;
 
     struct am335x_pru_priv *priv = malloc(sizeof(struct am335x_pru_priv));

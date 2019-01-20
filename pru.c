@@ -65,6 +65,11 @@ int pru_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t event )
     return pru->register_irq(pru, irq, channel, event );
 }
 
+int pru_wait_irq(pru_t pru, uint8_t irq, uint8_t* keeprunning, handler_t callback )
+{
+    return pru->wait_irq(pru, irq, keeprunning, callback);
+}
+
 int pru_deregister_irq(pru_t pru, uint8_t irq )
 {
     return pru->deregister_irq(pru, irq);
