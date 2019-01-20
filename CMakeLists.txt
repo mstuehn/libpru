@@ -17,3 +17,4 @@ find_library(libutil NAMES util)
 target_link_libraries(prudbg pru ${libedit} ${libutil})
 install(TARGETS pructl prudbg DESTINATION sbin)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
