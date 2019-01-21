@@ -26,6 +26,7 @@
 #pragma once
 
 #include <sys/types.h>
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C"
 {
@@ -46,7 +47,7 @@ struct pru_event{
     int8_t sys_event;
 };
 
-typedef void (*handler_t)(uint64_t);
+typedef bool (*handler_t)(uint64_t);
 
 typedef struct pru_event* pru_event_t;
 
@@ -60,10 +61,9 @@ int pru_register_irq(pru_t, uint8_t, int8_t, int8_t );
 
 /*
  * Waits for Interrupt, executes handler on occurance
- * gets exectuted as long as *keepRunning is true
  *
  */
-int pru_wait_irq(pru_t, uint8_t, uint8_t*, handler_t );
+int pru_wait_irq(pru_t, uint8_t, handler_t );
 
 /*
  * Deregisters to host interrupt.

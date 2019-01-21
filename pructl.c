@@ -32,14 +32,14 @@
 #include <inttypes.h>
 #include <libpru.h>
 
-static uint8_t run = 1;
+static bool run = true;
 
 static void sighandler( int signal )
 {
-    if( signal == SIGINT ) run = 0;
+    if( signal == SIGINT ) run = false;
 }
 
-static void callback_function( uint64_t ts )
+static bool callback_function( uint64_t ts )
 {
     uint64_t last;
     uint64_t last_diff;
@@ -52,6 +52,7 @@ static void callback_function( uint64_t ts )
            (diff - last_diff)%1000 );
     last = ts;
     last_diff = diff;
+    return run;
 }
 
 static void __attribute__((noreturn))
@@ -178,7 +179,7 @@ main(int argc, char **argv)
 	}
 	if( callback && irq_number > 0 ) {
 		signal( SIGINT, sighandler );
-		pru_wait_irq( pru, irq_number, &run, callback_function );
+		pru_wait_irq( pru, irq_number, callback_function );
 	}
 	if( unreg_irq && irq_number > 0 )
 	{

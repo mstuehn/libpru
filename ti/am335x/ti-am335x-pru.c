@@ -222,7 +222,7 @@ am335x_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t sysevent )
 }
 
 static int
-am335x_wait_irq(pru_t pru, uint8_t irqnum, uint8_t* keepRunning, handler_t callback)
+am335x_wait_irq(pru_t pru, uint8_t irqnum, handler_t callback)
 {
     char path[32];
     struct kevent change, event;
@@ -235,24 +235,23 @@ am335x_wait_irq(pru_t pru, uint8_t irqnum, uint8_t* keepRunning, handler_t callb
     int fd = open( path, O_RDONLY | O_NONBLOCK );
     if( fd == -1 ) return -1;
 
-    printf("Start listening on %s (%d/%d) fd%d\n", path,
-		    *keepRunning, irq_active, fd ); 
-    while( *keepRunning && irq_active )
+    printf("Start listening on %s (%d) fd%d\n", path, irq_active, fd );
+    for(;;)
     {
-	fd_set rfds;
-	FD_ZERO(&rfds);
-	FD_SET(fd,&rfds);
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(fd,&rfds);
 
-	int num_events = select(fd+1, &rfds, NULL, NULL, &timeout);
+        int num_events = select(fd+1, &rfds, NULL, NULL, &timeout);
 
         if( num_events == 0 ) continue; // timeout
         if( num_events < 0 ) return num_events;
 
-          uint64_t timestamp;
-          while( read( fd, &timestamp, sizeof(timestamp) ) > 0 )
-          {
-              callback(timestamp);
-          }
+        uint64_t timestamp;
+        while( read( fd, &timestamp, sizeof(timestamp) ) > 0 )
+        {
+            if( callback(timestamp) == false ) break;
+        }
     }
 
     close( fd );
