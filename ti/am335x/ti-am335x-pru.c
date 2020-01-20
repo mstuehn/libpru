@@ -222,7 +222,7 @@ am335x_register_irq(pru_t pru, uint8_t irq, int8_t channel, int8_t sysevent )
 }
 
 static int
-am335x_wait_irq(pru_t pru, uint8_t irqnum, handler_t callback)
+am335x_loop_irq(pru_t pru, uint8_t irqnum, handler_t on_irq)
 {
     char path[32];
     struct kevent change, event;
@@ -250,7 +250,7 @@ am335x_wait_irq(pru_t pru, uint8_t irqnum, handler_t callback)
         uint64_t timestamp;
         while( read( fd, &timestamp, sizeof(timestamp) ) > 0 )
         {
-            if( callback(timestamp) == false ) break;
+            if( on_irq(timestamp) == false ) break;
         }
     }
 
@@ -404,7 +404,7 @@ am335x_initialize( pru_t pru )
     pru->set_pc = am335x_set_pc;
     pru->insert_breakpoint = am335x_insert_breakpoint;
     pru->register_irq = am335x_register_irq;
-    pru->wait_irq = am335x_wait_irq;
+    pru->loop_irq = am335x_loop_irq;
     pru->deregister_irq = am335x_deregister_irq;
 
     struct am335x_pru_priv *priv = malloc(sizeof(struct am335x_pru_priv));

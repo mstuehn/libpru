@@ -179,7 +179,7 @@ main(int argc, char **argv)
 	}
 	if( callback && irq_number > 0 ) {
 		signal( SIGINT, sighandler );
-		pru_wait_irq( pru, irq_number, callback_function );
+		pru_loop_irq( pru, irq_number, callback_function );
 	}
 	if( unreg_irq && irq_number > 0 )
 	{

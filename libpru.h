@@ -63,7 +63,7 @@ int pru_register_irq(pru_t, uint8_t, int8_t, int8_t );
  * Waits for Interrupt, executes handler on occurance
  *
  */
-int pru_wait_irq(pru_t, uint8_t, handler_t );
+int pru_loop_irq(pru_t, uint8_t, handler_t );
 
 /*
  * Deregisters to host interrupt.
