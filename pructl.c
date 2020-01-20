@@ -28,13 +28,38 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
+#include <inttypes.h>
 #include <libpru.h>
+
+static bool run = true;
+
+static void sighandler( int signal )
+{
+    if( signal == SIGINT ) run = false;
+}
+
+static bool callback_function( uint64_t ts )
+{
+    uint64_t last;
+    uint64_t last_diff;
+    uint64_t diff = ts - last;
+    printf("TS: %" PRIu64 ".%09"PRIu64 "duration (%"PRIu64"ns/%"PRIu64".%0"PRIu64") \n",
+           //diff.tv_sec, diff.tv_nsec);
+           ts/1000000000, ts%1000000000,
+           diff,
+           (int64_t)(diff - last_diff)/1000,
+           (diff - last_diff)%1000 );
+    last = ts;
+    last_diff = diff;
+    return run;
+}
 
 static void __attribute__((noreturn))
 usage(void)
 {
-	fprintf(stderr, "usage: %s -t type [-p pru-number] [-edrw] [program]\n",
-	    getprogname());
+    fprintf(stderr, "usage: %s -t type [-p pru-number] [-i irq] [-v event] [-edrwc] [program]\n",
+        getprogname());
 	exit(1);
 }
 
@@ -42,16 +67,18 @@ int
 main(int argc, char **argv)
 {
 	int ch;
-	int reset, enable, disable, wait, callback;
+	int reset, enable, disable, wait, callback, reg_irq, unreg_irq;
 	const char *type = "ti";
 	unsigned int pru_number;
+	int8_t irq_number, event_number;
 	pru_t pru;
-    int error;
+	int error;
 
-  reset = enable = disable = pru_number = wait = callback = 0;
+	reset = enable = disable = pru_number = wait = callback = reg_irq = unreg_irq = 0;
+	irq_number = event_number = -1;
 	type = NULL;
 	error = 0;
-	while ((ch = getopt(argc, argv, "t:p:edrwc")) != -1) {
+	while ((ch = getopt(argc, argv, "t:p:edrwci:v:u")) != -1) {
 		switch (ch) {
 		case 't':
 			type = optarg;
@@ -73,6 +100,15 @@ main(int argc, char **argv)
 			break;
 		case 'c':
 			callback = 1;
+			break;
+		case 'i':
+			irq_number = (unsigned int)strtoul(optarg, NULL, 10);
+			break;
+		case 'v':
+			event_number = (unsigned int)strtoul(optarg, NULL, 10);
+			break;
+		case 'u':
+			unreg_irq = 1;
 			break;
 		case '?':
 		default:
@@ -137,36 +173,18 @@ main(int argc, char **argv)
 			return 8;
 		}
 	}
-/* Example code for interrupts
-	if( callback )
-    {
-        __block uint64_t last;
-        __block uint64_t last_diff;
-        struct timespec time;
+	if( irq_number > 0 && event_number > 0 )
+	{
+		pru_register_irq( pru, irq_number, irq_number, event_number );
+	}
+	if( callback && irq_number > 0 ) {
+		signal( SIGINT, sighandler );
+		pru_loop_irq( pru, irq_number, callback_function );
+	}
+	if( unreg_irq && irq_number > 0 )
+	{
+		pru_deregister_irq(pru, irq_number );
+	}
 
-        pru_register_irq( pru, 3, 3, 17,
-                ^(uint64_t ts){
-                //struct timespec diff;
-                //clock_gettime( CLOCK_MONOTONIC, &time );
-                //diff.tv_nsec = time.tv_nsec - ts%1000000000;
-                //diff.tv_sec = time.tv_sec - ts/1000000000;
-                uint64_t diff = ts - last;
-                printf("TS: %lli.%09lli duration (%llins/%lli.%0lli) \n",
-                        //diff.tv_sec, diff.tv_nsec);
-                        ts/1000000000, ts%1000000000,
-                        diff,
-                        (int64_t)(diff - last_diff)/1000,
-                        (diff - last_diff)%1000
-                );
-        last = ts;
-        last_diff = diff;
-                }
-        );
-        sleep(10);
-
-        pru_deregister_irq(pru, 3 );
-
-    }
-    */
 	pru_free(pru);
 }
