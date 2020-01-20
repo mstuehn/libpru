@@ -225,8 +225,12 @@ static int
 am335x_loop_irq(pru_t pru, uint8_t irqnum, handler_t on_irq)
 {
     char path[32];
+#if defined(WITH_KQUEUE)
     struct kevent change, event;
+    struct timespec timeout = { .tv_sec = 1, .tv_nsec = 0 };
+#else
     struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
+#endif
     struct am335x_pru_priv* am33 = pru->priv;
     struct irq_data* priv = &am33->irqs[irqnum];
 
@@ -235,14 +239,24 @@ am335x_loop_irq(pru_t pru, uint8_t irqnum, handler_t on_irq)
     int fd = open( path, O_RDONLY | O_NONBLOCK );
     if( fd == -1 ) return -1;
 
+#if defined(WITH_KQUEUE)
+    int kq = kqueue();
+    if( kq == -1 ) return kq;
+#endif
+
     printf("Start listening on %s (%d) fd%d\n", path, irq_active, fd );
     for(;;)
     {
+#if defined(WITH_KQUEUE)
+        EV_SET(&change, fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+        int num_events = kevent( kq, &change, 1, &event, 1, &timeout );
+#else
         fd_set rfds;
         FD_ZERO(&rfds);
         FD_SET(fd,&rfds);
 
         int num_events = select(fd+1, &rfds, NULL, NULL, &timeout);
+#endif
 
         if( num_events == 0 ) continue; // timeout
         if( num_events < 0 ) return num_events;
@@ -254,6 +268,9 @@ am335x_loop_irq(pru_t pru, uint8_t irqnum, handler_t on_irq)
         }
     }
 
+#if defined(WITH_KQUEUE)
+    close( kq );
+#endif
     close( fd );
     return 0;
 }
